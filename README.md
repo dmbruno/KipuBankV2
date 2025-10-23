@@ -1,145 +1,78 @@
 # KipuBankV2
 
-Este proyecto implementa **KipuBankV2**, un contrato bancario inteligente en Solidity que permite a los usuarios depositar y retirar tanto ETH como tokens ERC20 (ejemplo: USDC) de manera segura y transparente. El desarrollo se ha realizado según consignas prácticas y de buenas prácticas de smart contracts en Ethereum.
+## Descripción general y mejoras implementadas
+
+KipuBankV2 es una evolución del contrato original KipuBank, con el objetivo de acercarlo a un estándar de producción y aplicar buenas prácticas de Solidity, seguridad y extensibilidad, todo desarrollado y probado en **Remix IDE**.
+
+### Mejoras realizadas
+
+- **Control de acceso avanzado:** Implementación de roles administrativos y de pausado usando OpenZeppelin AccessControl y Ownable, para mayor seguridad en funciones críticas.
+- **Soporte multi-token:** Ahora el banco acepta depósitos y retiros tanto de Ether como de cualquier token ERC20, permitiendo fácilmente la extensión a nuevos activos.
+- **Contabilidad multi-token:** Los saldos de cada usuario se gestionan por token soportado, consultables individualmente.
+- **Integración con oráculos Chainlink:** El contrato utiliza feeds de precios de Chainlink para convertir el valor de los depósitos a USD y controlar el límite total del banco (“bank cap”).
+- **Conversión de decimales y valores:** Se maneja correctamente la diferencia entre decimales de cada token y los feeds, usando una base interna de 6 decimales (como USDC).
+- **Eventos y errores personalizados:** Se emiten eventos detallados para depósitos, retiros, pausas y cambios de oráculo, y se usan errores personalizados para facilitar el debugging y ahorrar gas.
+- **Seguridad y eficiencia:** Se aplican patrones como checks-effects-interactions, uso de constantes e inmutables, SafeERC20 para transferencias seguras y manejo robusto de Ether.
+- **Pausado del banco:** Se puede pausar y reanudar la operación del banco mediante roles, protegiendo a los usuarios ante emergencias.
+- **Extensible:** Se pueden agregar nuevos tokens y oráculos fácilmente con `addSupportedToken`, sin cambiar la lógica central.
+
+## Instrucciones de despliegue e interacción (Remix)
+
+### Prerrequisitos
+
+- Tener una wallet compatible con Ethereum (por ejemplo MetaMask) conectada a una testnet (Sepolia).
+- Conocer la dirección de los oráculos Chainlink y tokens a usar (por ejemplo, USDC y ETH en Sepolia).
+
+### Despliegue en Remix
+
+1. Entrar en [Remix IDE](https://remix.ethereum.org/)
+2. Crear una carpeta `/contracts` y agregar los archivos del contrato KipuBankV2, así como las interfaces necesarias (por ejemplo, IKipuBankV2).
+3. En la pestaña "Solidity Compiler", seleccionar la versión **0.8.20**.
+4. Compilar el contrato `KipuBankV2.sol`.
+5. Ir a la pestaña "Deploy & Run Transactions".
+6. Seleccionar el entorno "Injected Provider - Metamask" y conectar tu wallet a Sepolia.
+7. Ingresar el parámetro `bankCapUSD` (ejemplo: `1000000` para un límite de 1,000,000 USD) y desplegar el contrato.
+8. Guardar la dirección del contrato desplegado para interactuar luego.
+
+### Interacción desde Remix
+
+- **Depositar ETH:**  
+  - Seleccionar la función `deposit`.  
+  - En el campo `token` poner `0x0000000000000000000000000000000000000000` y en `amount` poner `0`.  
+  - Indicar el monto de ETH en el campo "Value" de Remix.
+- **Depositar ERC20:**  
+  - Primero aprobar el contrato desde el token ERC20 (llamando a `approve`).  
+  - Luego llamar a `deposit` con la dirección del token y el monto.
+- **Retirar:**  
+  - Usar la función `withdraw` indicando el token y el monto a retirar.
+- **Consultar saldo:**  
+  - Usar `getBalance(token, usuario)` para ver el saldo individual.
+- **Agregar token soportado:**  
+  - El admin llama a `addSupportedToken(token, decimals, priceFeed)`.
+- **Pausar/Despausar:**  
+  - Los usuarios con el rol `PAUSER_ROLE` pueden llamar a `pause()` o `unpause()`.
+
+## Decisiones de diseño y trade-offs
+
+- **Control de acceso:** Se eligió AccessControl de OpenZeppelin por su flexibilidad para roles múltiples y administración descentralizada, combinándolo con Ownable para ownership clásico.
+- **Contabilidad multi-token:** Un mapping anidado permite balances independientes por usuario y por token, facilitando la extensión.
+- **Oráculos y feeds:** Integración con Chainlink para feeds de precios seguros y descentralizados.
+- **Conversión de decimales:** Base interna de 6 decimales para homogeneizar la contabilidad y compatibilidad con USDC.
+- **Eventos y errores:** Se priorizó la observabilidad y el ahorro de gas, usando eventos claros y errores personalizados.
+- **Pausado global:** Permite a los administradores detener el banco ante incidentes.
+- **ETH como token:** Uso de address(0) para Ether, siguiendo el estándar de la comunidad.
+- **Extensibilidad:** El contrato puede ampliarse fácilmente a nuevos tokens y oráculos sin migrar ni modificar la lógica central.
+- **Limitaciones:** El contrato depende de la disponibilidad y precisión de los oráculos Chainlink para la conversión a USD. No implementa intereses ni préstamos.
 
 ---
 
-## 📋 Consignas cumplidas
+## Cómo correr pruebas (Remix)
 
-### 1. **Depósito y retiro de ETH y Tokens ERC20**
-- El contrato soporta depósitos y retiros en ETH y en cualquier token ERC20 soportado, como USDC.
-- Se utiliza la address cero (`0x000...0000`) para identificar ETH y la address real del token para ERC20.
-
-### 2. **Gestión de Allowance y Approve**
-- Antes de depositar tokens ERC20, el usuario debe dar permiso (`approve`) al contrato para mover sus fondos.
-- El contrato usa `transferFrom` de ERC20 para mover los tokens, cumpliendo la lógica de seguridad de los estándares.
-
-### 3. **Control y registro de operaciones**
-- El contrato registra el número de depósitos y retiros realizados.
-- Lleva control del balance actual de cada token.
-- Incluye límites (“cap”) para el máximo de tokens aceptados (ejemplo: capUSD).
-
-### 4. **Eventos y transparencia**
-- Emite eventos en cada depósito y retiro para máxima trazabilidad.
-- Se puede consultar el resumen de actividad con la función `summary`.
-
-### 5. **Uso de interfaces y estándares**
-- Se implementa y utiliza la interfaz estándar `IERC20`.
-- Se aprovechan librerías de OpenZeppelin para seguridad y robustez.
-
-### 6. **Control de roles y permisos**
-- El contrato soporta roles (ejemplo: `PAUSER_ROLE`, `AUDITOR_ROLE`) para gestión administrativa segura.
-
-### 7. **Chequeo de decimales**
-- El contrato maneja correctamente los decimales de cada token (ejemplo: 6 decimales para USDC).
+- Puedes escribir scripts en la pestaña "Scripts" de Remix o interactuar manualmente usando la interfaz gráfica.
+- Para pruebas de depósitos y retiros de ERC20, primero aprueba los tokens y luego llama a las funciones correspondientes.
 
 ---
 
-## 🚀 Cómo usar
+## Contacto
 
-### **1. Clonar el repositorio**
-```bash
-git clone https://github.com/TUUSUARIO/kipubankv2.git
-cd kipubankv2
-```
-
-### **2. Instalar dependencias**
-Si vas a trabajar localmente con herramientas como Hardhat o Foundry, instala las dependencias (si existe package.json):
-
-```bash
-npm install
-```
-
-O agrega OpenZeppelin si es necesario:
-```bash
-npm install @openzeppelin/contracts
-```
-
-### **3. Abrir en Remix**
-Puedes abrir los archivos directamente en [Remix IDE](https://remix.ethereum.org/) arrastrando la carpeta o subiendo los archivos del directorio `contracts/`.
-
----
-
-### **4. Desplegar el contrato**
-
-1. Compila `KipuBankV2.sol` en Remix.
-2. Selecciona el entorno adecuado (por ejemplo, Injected Provider para usar MetaMask).
-3. Despliega el contrato desde la pestaña "Deploy & Run Transactions".
-
----
-
-### **5. Realizar operaciones**
-
-#### **A. Depósito de ETH**
-- Llama a la función `deposit`:
-  - `token`: `0x0000000000000000000000000000000000000000`
-  - `amount`: cantidad en Wei (ej: 0.01 ETH = 10000000000000000)
-  - `VALUE` (en Remix): igual al amount (en Wei)
-
-#### **B. Depósito de USDC**
-1. Haz `approve` en el contrato USDC:
-   - `spender`: dirección de KipuBankV2
-   - `amount`: cantidad a aprobar (ej: 10 USDC = 10000000)
-2. Llama a `deposit` en KipuBankV2:
-   - `token`: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
-   - `amount`: cantidad en decimales USDC (ej: 10 USDC = 10000000)
-   - `VALUE`: 0
-
-#### **C. Retiro de ETH**
-- Llama a la función `withdraw`:
-  - `token`: `0x0000000000000000000000000000000000000000`
-  - `amount`: cantidad en Wei
-  - `VALUE`: 0
-
-#### **D. Retiro de USDC**
-- Llama a la función `withdraw`:
-  - `token`: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
-  - `amount`: cantidad en decimales USDC (ej: 5 USDC = 5000000)
-  - `VALUE`: 0
-
----
-
-### **6. Consultar información del contrato**
-- Usa la función `summary` para ver los depósitos, retiros y balances.
-- Usa `getBalance(token, address)` para consultar el saldo de un usuario en un token específico.
-- Revisa los eventos emitidos para auditar operaciones.
-
----
-
-### **7. Personalizar y extender**
-- Puedes agregar soporte para otros tokens ERC20 en la función `addSupportedToken`.
-- Utiliza los roles administrativos (`grantRole`, `pause`, etc.) para gestionar la seguridad y el control del banco.
-- Ajusta el `capUSD` según las necesidades del proyecto.
-
----
-
-## 🛡️ Seguridad y buenas prácticas
-
-- Uso estricto de `SafeERC20` y validaciones de amount.
-- No se permite depositar ni retirar montos cero.
-- Manejo de roles administrativos.
-- Eventos para todas las operaciones.
-- Lógica de approve y allowance comprobada en testnet.
-
----
-
-## 📁 Estructura del proyecto
-
-```
-contracts/
-│   KipuBankV2.sol
-│   IERC20.sol
-│   (otros contratos o interfaces)
-README.md
-```
-
----
-
-## ✨ Créditos
-
-- Implementación: dmbruno
-- Basado en consignas del curso/práctica de contratos inteligentes con Remix, OpenZeppelin y ERC20.
-
----
-
-¿Tienes dudas o sugerencias? ¡Abre un issue o PR!
+Para dudas, feedback o contribuciones, abre un issue en el repositorio o contáctame por GitHub.
